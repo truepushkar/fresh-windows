@@ -43,8 +43,8 @@ $Apps = @(
     },
     [PSCustomObject]@{
         Number = 3
-        Name   = "Python 3.13"
-        ID     = "Python.Python.3.13"
+        Name   = "Python 3.14"
+        ID     = "Python.Python.3.14"
         Source = "winget"
     },
     [PSCustomObject]@{
