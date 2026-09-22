@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
     Fresh Windows Setup
     --------------------
@@ -80,54 +80,146 @@ $Results = @()
 #  UI PRIMITIVES
 # ============================================================
 
-function Write-Box {
-    # Draws a centered double-line box around one or two lines of text.
-    param([string]$Title, [string]$Subtitle, [string]$Color = $C.Accent)
+$Banner = @'
+███████ █████████ ███████ █████████ ███   ███
+▓▓█     ▓▓█   █▓▓ ▓▓█     ▓▓█       ▓▓█▄▄▄█▓▓
+▒▓▓▓▒   ▒▒▓▓▒░▓▓  ▒▓▓▓▒   ▒▓▓▓▒░▓▓▒ ▒▒▓▓██▓▓▒
+▒▒░     ░░▒   ░░▒ ▒▒░           ░░▒ ░░▒   ░░▒
+░░      ░░░    ░░ ░░      ░░ ███░    ░░   ░░
 
-    $width = 60
-    $pad = { param($s) $l = [math]::Max(0, ($width - 2 - $s.Length)); $left = [math]::Floor($l / 2); $right = $l - $left; (" " * $left) + $s + (" " * $right) }
+███     ███ ███ ██▄   ███ ████████▄ █████████ ███     ███ █████████
+▓▓█ ▄▄▄ █▓▓ ▓▓█ ▓▓██▄ █▓▓ ▓▓█   █▓▓ ▓▓█   █▓▓ ▓▓█ ▄▄▄ █▓▓ ▓▓█
+▒▒▓ ▒░▒ ▓▓▒ ▒▒▓ ▒▒▓▀██▓▓▒ ▒▒▓   ▓▓▒ ▒▒▓   ▓▓▒ ▒▒▓ ▒░▒ ▓▓▒ ▒▓▓▓▒░▓▓▒
+░░▒ ░█░ ░░▒ ░░▒ ░░▒  ▀░░▒ ░░▒   ░░▒ ░░▒   ░░▒ ░░▒ ░█░ ░░▒       ░░▒
+░░  █▀       ░░  ░░   ░   ░░      ▀ ░░        ░░  █▀      ░░ ███░
+'@
 
-    Write-Host ($Glyph.TL + ($Glyph.H * ($width - 2)) + $Glyph.TR) -ForegroundColor $Color
-    Write-Host ($Glyph.V + (& $pad $Title) + $Glyph.V) -ForegroundColor $Color
-    if ($Subtitle) {
-        Write-Host ($Glyph.V + (& $pad $Subtitle) + $Glyph.V) -ForegroundColor $Color
+function Set-TerminalLayout {
+    try {
+        if ($Host.UI.RawUI.WindowSize.Width -lt 110) {
+            $size = $Host.UI.RawUI.WindowSize
+            $newWidth = [math]::Min(140, [math]::Max(110, $size.Width))
+            $newHeight = [math]::Min(45, [math]::Max(30, $size.Height))
+            $Host.UI.RawUI.WindowSize = New-Object System.Management.Automation.Host.Size($newWidth, $newHeight)
+        }
+        $Host.UI.RawUI.WindowTitle = "Fresh Windows Setup"
+    } catch {}
+}
+
+function Write-Centered {
+    param(
+        [string]$Text,
+        [string]$Color = $C.Title,
+        [switch]$NoNewline
+    )
+
+    try {
+        $width = $Host.UI.RawUI.WindowSize.Width
+        $left = [math]::Max(0, [int](($width - $Text.Length) / 2))
+    } catch {
+        $left = 0
     }
-    Write-Host ($Glyph.BL + ($Glyph.H * ($width - 2)) + $Glyph.BR) -ForegroundColor $Color
+
+    $line = (" " * $left) + $Text
+    if ($NoNewline) {
+        Write-Host $line -NoNewline -ForegroundColor $Color
+    } else {
+        Write-Host $line -ForegroundColor $Color
+    }
+}
+
+function Write-Panel {
+    param(
+        [string]$Title,
+        [string]$Subtitle = "",
+        [string]$Color = $C.Accent,
+        [int]$Width = 76
+    )
+
+    $inner = $Width - 2
+    $titlePad = [math]::Max(0, $inner - $Title.Length)
+    $left = [math]::Floor($titlePad / 2)
+    $right = $titlePad - $left
+
+    Write-Host ""
+    Write-Host ("╭" + ("─" * $inner) + "╮") -ForegroundColor $Color
+    Write-Host ("│" + (" " * $left) + $Title + (" " * $right) + "│") -ForegroundColor $Color
+
+    if ($Subtitle) {
+        $subPad = [math]::Max(0, $inner - $Subtitle.Length)
+        $sLeft = [math]::Floor($subPad / 2)
+        $sRight = $subPad - $sLeft
+        Write-Host ("│" + (" " * $sLeft) + $Subtitle + (" " * $sRight) + "│") -ForegroundColor $C.Muted
+    }
+
+    Write-Host ("╰" + ("─" * $inner) + "╯") -ForegroundColor $Color
+}
+
+function Write-Box {
+    param(
+        [string]$Title,
+        [string]$Subtitle,
+        [string]$Color = $C.Accent
+    )
+    Write-Panel -Title $Title -Subtitle $Subtitle -Color $Color
 }
 
 function Write-Rule {
-    param([string]$Color = $C.Muted)
-    Write-Host ("─" * 60) -ForegroundColor $Color
+    param([string]$Color = $C.Muted, [int]$Width = 76)
+    Write-Host ("─" * $Width) -ForegroundColor $Color
 }
 
 function Write-Header {
     Clear-Host
+    Set-TerminalLayout
+
     Write-Host ""
-    Write-Box -Title "FRESH WINDOWS SETUP" -Subtitle "v2.2 · WinGet + Office Deployment Tool"
+    Write-Centered "FRESH WINDOWS SETUP" $C.Accent
+    Write-Centered "Automated Windows workstation bootstrapper" $C.Muted
     Write-Host ""
 }
 
 function Write-Status {
-    # One consistent line format for every status message in the script.
-    param([string]$Icon, [string]$Text, [string]$Color)
-    Write-Host "  $Icon  $Text" -ForegroundColor $Color
+    param(
+        [string]$Icon,
+        [string]$Text,
+        [string]$Color
+    )
+    Write-Host "  " -NoNewline
+    Write-Host $Icon -NoNewline -ForegroundColor $Color
+    Write-Host "  $Text" -ForegroundColor $Color
 }
 
 function Write-ProgressBar {
-    param([int]$Current, [int]$Total, [string]$Activity = "")
+    param(
+        [int]$Current,
+        [int]$Total,
+        [string]$Activity = ""
+    )
+
     if ($Total -le 0) { return }
 
     $Percent = [math]::Min(100, [math]::Max(0, [math]::Round(($Current / $Total) * 100)))
-    $Width   = 40
+    $Width   = 46
     $Filled  = [math]::Round(($Percent / 100) * $Width)
     $Bar     = ("█" * $Filled) + ("░" * ($Width - $Filled))
 
     Write-Host ""
-    Write-Host "  [$Bar] " -NoNewline -ForegroundColor $C.Accent
-    Write-Host "$Percent%" -NoNewline -ForegroundColor $C.Title
-    Write-Host "  ($Current/$Total)" -ForegroundColor $C.Muted
+    Write-Host "  ┌─ Progress " -NoNewline -ForegroundColor $C.Muted
+    Write-Host "────────────────────────────────────────────┐" -ForegroundColor $C.Muted
+    Write-Host "  │ " -NoNewline -ForegroundColor $C.Muted
+    Write-Host $Bar -NoNewline -ForegroundColor $C.Accent
+    Write-Host " │" -ForegroundColor $C.Muted
+    Write-Host "  │ " -NoNewline -ForegroundColor $C.Muted
+    Write-Host ("{0,3}%" -f $Percent) -NoNewline -ForegroundColor $C.Title
+    Write-Host "    $Current / $Total" -NoNewline -ForegroundColor $C.Muted
+    Write-Host (" " * [math]::Max(0, 32 - ("$Current / $Total").Length)) -NoNewline
+    Write-Host "│" -ForegroundColor $C.Muted
+    Write-Host "  └──────────────────────────────────────────────────────┘" -ForegroundColor $C.Muted
+
     if ($Activity) {
-        Write-Host "  $($Icon.Arrow) $Activity" -ForegroundColor $C.Title
+        Write-Host "  $($Icon.Arrow) " -NoNewline -ForegroundColor $C.Accent
+        Write-Host $Activity -ForegroundColor $C.Title
     }
 }
 
@@ -138,21 +230,31 @@ function Format-Time {
 }
 
 function Show-AppMenu {
-    # Two-column layout so the 18-item list doesn't sprawl down the screen.
     param([array]$List)
 
     $half = [math]::Ceiling($List.Count / 2)
+
+    Write-Host ""
+    Write-Host "  ┌──── APP CATALOG ───────────────────────────────────────────────────────┐" -ForegroundColor $C.Muted
+
     for ($i = 0; $i -lt $half; $i++) {
         $left  = $List[$i]
         $right = $List[$i + $half]
-        $l = "{0,2}. {1}" -f $left.Number, $left.Name
-        $line = $l.PadRight(34)
+
+        $leftText = "{0,2}  {1}" -f $left.Number, $left.Name
+        $line = "  │  " + $leftText.PadRight(38)
+
         if ($right) {
-            $r = "{0,2}. {1}" -f $right.Number, $right.Name
-            $line += $r
+            $rightText = "{0,2}  {1}" -f $right.Number, $right.Name
+            $line += $rightText.PadRight(36)
+        } else {
+            $line += (" " * 36)
         }
-        Write-Host "  $line"
+
+        Write-Host ($line + "│") -ForegroundColor $C.Title
     }
+
+    Write-Host "  └────────────────────────────────────────────────────────────────────────┘" -ForegroundColor $C.Muted
 }
 
 # ============================================================
@@ -528,7 +630,7 @@ function Read-AppSelection {
 
 function Full-Installation {
     Write-Header
-    Write-Host "  FULL INSTALLATION" -ForegroundColor $C.Accent
+    Write-Panel -Title "FULL INSTALLATION" -Subtitle "Install the complete workstation profile" -Color $C.Success
     Write-Host ""
     Write-Host "  The following will be installed:" -ForegroundColor $C.Title
     Write-Host ""
@@ -546,7 +648,7 @@ function Full-Installation {
 function Manual-Installation {
     while ($true) {
         Write-Header
-        Write-Host "  MANUAL INSTALLATION" -ForegroundColor $C.Accent
+        Write-Panel -Title "MANUAL INSTALLATION" -Subtitle "Choose exactly which applications to install" -Color $C.Accent
         Write-Host ""
         Show-AppMenu -List $Apps
         Write-Host ""
@@ -586,7 +688,7 @@ function Manual-Installation {
 function Remove-Applications {
     while ($true) {
         Write-Header
-        Write-Host "  REMOVE APPLICATIONS" -ForegroundColor $C.Error
+        Write-Panel -Title "REMOVE APPLICATIONS" -Subtitle "Uninstall selected applications" -Color $C.Error
         Write-Host ""
         Show-AppMenu -List $Apps
         Write-Host ""
@@ -635,6 +737,7 @@ function Remove-Applications {
 
 if (-not (Test-Admin)) {
     Write-Host ""
+    Write-Panel -Title "ADMINISTRATOR REQUIRED" -Subtitle "Please relaunch PowerShell as Administrator" -Color $C.Error
     Write-Status -Icon $Icon.Fail -Text "This script must be run as Administrator" -Color $C.Error
     Write-Host ""
     Read-Host "Press Enter to exit"
@@ -643,6 +746,7 @@ if (-not (Test-Admin)) {
 
 if (-not (Test-Winget)) {
     Write-Host ""
+    Write-Panel -Title "WINGET NOT FOUND" -Subtitle "Microsoft App Installer is required" -Color $C.Error
     Write-Status -Icon $Icon.Fail -Text "WinGet was not found" -Color $C.Error
     Write-Host "  Install/update 'App Installer' from the Microsoft Store and try again." -ForegroundColor $C.Muted
     Write-Host ""
@@ -658,14 +762,25 @@ Initialize-Winget
 
 while ($true) {
     Write-Header
-    Write-Host "   1  Full Installation"          -ForegroundColor $C.Success
-    Write-Host "   2  Manual Installation"        -ForegroundColor $C.Accent
-    Write-Host "   3  Remove Applications"        -ForegroundColor $C.Error
-    Write-Host "   4  Retry Failed Installations" -ForegroundColor $C.Warning
-    Write-Host "   5  Exit"                       -ForegroundColor $C.Muted
+    Write-Panel -Title "MAIN MENU" -Subtitle "Choose an operation" -Color $C.Accent
+
+    Write-Host "  [1]  Full Installation"          -ForegroundColor $C.Success
+    Write-Host "       Complete workstation setup"  -ForegroundColor $C.Muted
+    Write-Host ""
+    Write-Host "  [2]  Manual Installation"        -ForegroundColor $C.Accent
+    Write-Host "       Select applications"         -ForegroundColor $C.Muted
+    Write-Host ""
+    Write-Host "  [3]  Remove Applications"        -ForegroundColor $C.Error
+    Write-Host "       Uninstall selected apps"     -ForegroundColor $C.Muted
+    Write-Host ""
+    Write-Host "  [4]  Retry Failed Installations" -ForegroundColor $C.Warning
+    Write-Host "       Retry the previous failures" -ForegroundColor $C.Muted
+    Write-Host ""
+    Write-Host "  [5]  Exit"                       -ForegroundColor $C.Muted
     Write-Host ""
 
-    switch (Read-Host "Select an option") {
+    $MenuChoice = Read-Host "  Select an option"
+    switch ($MenuChoice) {
         "1" { Full-Installation }
         "2" { Manual-Installation }
         "3" { Remove-Applications }
