@@ -51,15 +51,20 @@ New-Item -ItemType Directory -Force -Path $SetupRoot, $LogDir, $TempDir | Out-Nu
 $LogFile = "$LogDir\setup-$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').log"
 try { Start-Transcript -Path $LogFile -Append | Out-Null } catch {}
 
-$ODTUrl = "https://download.microsoft.com/download/2/fe/0642e2-4248-4175-94df-3e2a5bc09119/officedeploymenttool_20326-20112.exe"
+# Office Deployment Tool (verified 2026-09; Expand-ODT auto-resolves a fresh link if this one goes stale)
+$ODTUrl          = "https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_20326-20112.exe"
+$ODTFallbackPage = "https://www.microsoft.com/en-us/download/details.aspx?id=49117"
 
 $Apps = @(
     [PSCustomObject]@{ Number = 1;  Name = "Telegram";                              ID = "Telegram.TelegramDesktop";  Source = "winget"  }
     [PSCustomObject]@{ Number = 2;  Name = "PowerToys";                             ID = "Microsoft.PowerToys";       Source = "winget"  }
     [PSCustomObject]@{ Number = 3;  Name = "Python 3.14";                           ID = "Python.Python.3.14";        Source = "winget"  }
     [PSCustomObject]@{ Number = 4;  Name = "Visual Studio Code";                    ID = "Microsoft.VisualStudioCode";Source = "winget"  }
-    [PSCustomObject]@{ Number = 5;  Name = "Spotify";                               ID = "Spotify.Spotify";           Source = "winget"  }
-    [PSCustomObject]@{ Number = 6;  Name = "WhatsApp";                              ID = "WhatsApp";                  Source = "msstore" }
+    # Scope=user is required for per-user installers (Spotify) that fail with
+    # 0x8A150056 "installer prohibits elevation" when winget runs elevated.
+    [PSCustomObject]@{ Number = 5;  Name = "Spotify";                               ID = "Spotify.Spotify";           Source = "winget";  Scope = "user" }
+    # msstore packages are identified by their Store ID, not a name.
+    [PSCustomObject]@{ Number = 6;  Name = "WhatsApp";                              ID = "9NKSQGP7F2NH";              Source = "msstore" }
     [PSCustomObject]@{ Number = 7;  Name = "Brave";                                 ID = "Brave.Brave";               Source = "winget"  }
     [PSCustomObject]@{ Number = 8;  Name = "Google Chrome";                         ID = "Google.Chrome";             Source = "winget"  }
     [PSCustomObject]@{ Number = 9;  Name = "Git";                                   ID = "Git.Git";                   Source = "winget"  }
@@ -284,6 +289,16 @@ function Test-AppInstalled {
     } catch { return $false }
 }
 
+function Get-InstallerFallbackUrl {
+    # Returns a direct installer URL for packages whose winget install fails
+    # when elevated. Currently only Spotify needs this.
+    param([string]$AppId)
+    switch ($AppId) {
+        "Spotify.Spotify" { return "https://download.scdn.co/SpotifyFullSetupX64.exe" }
+        default           { return $null }
+    }
+}
+
 # ============================================================
 #  INSTALL / REMOVE — SINGLE APP
 # ============================================================
@@ -308,6 +323,7 @@ function Install-App {
         "install", "--id", $App.ID, "--exact", "--source", $App.Source,
         "--silent", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"
     )
+    if ($App.Scope) { $Arguments += @("--scope", $App.Scope) }
 
     try {
         & winget @Arguments 2>&1 | Tee-Object -FilePath $OutputFile | Out-Null
@@ -315,6 +331,38 @@ function Install-App {
             Write-Status -Icon $Icon.Ok -Text "$($App.Name) installed" -Color $C.Success
             return [PSCustomObject]@{ Name = $App.Name; Status = "Installed" }
         }
+
+        # 0x8A150056 = installer prohibits elevation. Retry as the invoking user
+        # via scheduled task / Start-Process -Verb Open, without the elevation context.
+        if ($LASTEXITCODE -eq -1978335146) {
+            Write-Status -Icon $Icon.Warn -Text "Installer refused elevation — retrying unelevated…" -Color $C.Warning
+            $DirectArgs = @("install", "--id", $App.ID, "--exact", "--source", $App.Source,
+                "--scope", "user", "--silent", "--accept-package-agreements",
+                "--accept-source-agreements", "--disable-interactivity")
+            & winget @DirectArgs 2>&1 | Tee-Object -FilePath $OutputFile -Append | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Status -Icon $Icon.Ok -Text "$($App.Name) installed (per-user)" -Color $C.Success
+                return [PSCustomObject]@{ Name = $App.Name; Status = "Installed" }
+            }
+            # Last resort: per-machine Spotify-style Squirrel installers can be
+            # launched directly; they self-install to %LOCALAPPDATA% per user.
+            $FallbackUrl = Get-InstallerFallbackUrl -AppId $App.ID
+            if ($FallbackUrl) {
+                Write-Status -Icon $Icon.Warn -Text "Winget failed again — trying direct installer…" -Color $C.Warning
+                $DirectExe = "$TempDir\$SafeName-setup.exe"
+                try {
+                    Invoke-WebRequest -Uri $FallbackUrl -OutFile $DirectExe -UseBasicParsing
+                    Start-Process -FilePath $DirectExe -ArgumentList "/silent" -Wait
+                    if (Test-Path "$env:LOCALAPPDATA\Spotify\Spotify.exe") {
+                        Write-Status -Icon $Icon.Ok -Text "$($App.Name) installed (direct)" -Color $C.Success
+                        return [PSCustomObject]@{ Name = $App.Name; Status = "Installed" }
+                    }
+                } catch {
+                    Write-Status -Icon $Icon.Warn -Text "Direct installer failed — $($_.Exception.Message)" -Color $C.Warning
+                }
+            }
+        }
+
         Write-Status -Icon $Icon.Fail -Text "$($App.Name) failed (exit $LASTEXITCODE)" -Color $C.Error
         return [PSCustomObject]@{ Name = $App.Name; Status = "Failed" }
     } catch {
@@ -389,8 +437,18 @@ function Expand-ODT {
     try {
         Invoke-WebRequest -Uri $ODTUrl -OutFile $ODTInstaller -UseBasicParsing
     } catch {
-        Write-Status -Icon $Icon.Fail -Text "Failed to download ODT" -Color $C.Error
-        return $null
+        # The hard-coded link can go stale — resolve the current one from the
+        # official download page (id=49117) and retry.
+        Write-Status -Icon $Icon.Warn -Text "Download link stale — resolving current ODT link…" -Color $C.Warning
+        try {
+            $Page = Invoke-WebRequest -Uri $ODTFallbackPage -UseBasicParsing
+            $FreshUrl = [regex]::Match($Page.Content, 'https://download\.microsoft\.com/download/[A-Za-z0-9\-]+/officedeploymenttool_[\w\-]+\.exe').Value
+            if (-not $FreshUrl) { throw "Could not resolve a new ODT link from the download page." }
+            Invoke-WebRequest -Uri $FreshUrl -OutFile $ODTInstaller -UseBasicParsing
+        } catch {
+            Write-Status -Icon $Icon.Fail -Text "Failed to download ODT — $($_.Exception.Message)" -Color $C.Error
+            return $null
+        }
     }
 
     $ExtractDir = "$Dest\ODT"
