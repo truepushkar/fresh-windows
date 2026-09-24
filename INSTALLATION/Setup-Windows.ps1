@@ -55,6 +55,31 @@ try { Start-Transcript -Path $LogFile -Append | Out-Null } catch {}
 $ODTUrl          = "https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_20326-20112.exe"
 $ODTFallbackPage = "https://www.microsoft.com/en-us/download/details.aspx?id=49117"
 
+# Hermes Agent (https://hermes-agent.nousresearch.com/) — official Windows installer.
+# Installs per-user into %LOCALAPPDATA%\hermes (uv, Python 3.11, Node.js, ripgrep,
+# ffmpeg are provisioned automatically by the installer itself).
+$HermesInstallUrl = "https://hermes-agent.nousresearch.com/install.ps1"
+
+# EvoFox Phantom Air wired gaming mouse configuration software (Amkette).
+# Direct link from https://www.amkette.com/pages/evofox-phantom-air-wired-gaming-mouse-help
+# (Inno Setup 5.5.9 package; verified 2026-09). Installs to
+# "C:\Program Files (x86)\EvoFox Phantom Air Gaming Mouse" (config app:
+# Gaming Mouse 3.0.exe).
+$EvoFoxUrl      = "https://cdn.shopify.com/s/files/1/0676/1273/7846/files/EvoFox_Phantom_Air_Gaming_Mouse._20250620_1.exe?v=1750394461"
+$EvoFoxHelpPage = "https://www.amkette.com/pages/evofox-phantom-air-wired-gaming-mouse-help"
+
+# Chris Titus WinUtil — open-source Windows tweak/debloat utility (interactive GUI).
+# The script already runs elevated (Test-Admin gate), so WinUtil launches
+# with admin rights automatically.
+$WinUtilUrl = "https://christitus.com/win"
+
+# MassGrave (Microsoft Activation Scripts) — open-source activation tool
+# (irm https://get.activated.win | iex). Interactive menu opens after launch;
+# the user picks an activation option there (green = recommended).
+# The script already runs elevated (Test-Admin gate), so MAS launches
+# with admin rights automatically — no UAC prompt.
+$MassGraveUrl = "https://get.activated.win"
+
 $Apps = @(
     [PSCustomObject]@{ Number = 1;  Name = "Telegram";                              ID = "Telegram.TelegramDesktop";  Source = "winget"  }
     [PSCustomObject]@{ Number = 2;  Name = "PowerToys";                             ID = "Microsoft.PowerToys";       Source = "winget"  }
@@ -77,6 +102,12 @@ $Apps = @(
     [PSCustomObject]@{ Number = 16; Name = "GitHub CLI";                            ID = "GitHub.cli";                Source = "winget"  }
     [PSCustomObject]@{ Number = 17; Name = "PowerShell 7";                          ID = "Microsoft.PowerShell";      Source = "winget"  }
     [PSCustomObject]@{ Number = 18; Name = "Microsoft 365 (Word + Excel + PowerPoint)"; ID = "OFFICE";                Source = "microsoft" }
+    # Hermes Agent uses its own installer (iex irm install.ps1), not winget.
+    # The sentinel ID "HERMES" is dispatched to Install-Hermes / Remove-Hermes.
+    [PSCustomObject]@{ Number = 19; Name = "Hermes Agent (Nous Research CLI)";        ID = "HERMES";                Source = "custom"  }
+    # EvoFox Phantom Air mouse software uses its own installer from Amkette's
+    # help page. Sentinel ID "EVOFOX" is dispatched to Install-EvoFox / Remove-EvoFox.
+    [PSCustomObject]@{ Number = 20; Name = "EvoFox Phantom Air Mouse Software";      ID = "EVOFOX";                Source = "custom"  }
 )
 
 $Results = @()
@@ -377,6 +408,8 @@ function Remove-App {
     Write-Status -Icon $Icon.Arrow -Text "Removing $($App.Name)…" -Color $C.Warning
 
     if ($App.ID -eq "OFFICE") { Remove-Office; return }
+    if ($App.ID -eq "HERMES") { Remove-Hermes; return }
+    if ($App.ID -eq "EVOFOX") { Remove-EvoFox; return }
 
     try {
         winget uninstall --id $App.ID --exact --source $App.Source --silent --accept-source-agreements --disable-interactivity | Out-Null
@@ -515,6 +548,198 @@ function Remove-Office {
 }
 
 # ============================================================
+#  HERMES AGENT (official install.ps1 from hermes-agent.nousresearch.com)
+# ============================================================
+
+function Test-HermesInstalled {
+    # The installer stages the launcher in %LOCALAPPDATA%\hermes\bin
+    # (hermes.cmd or hermes.exe) and adds it to the User PATH; the checkout
+    # lives under %LOCALAPPDATA%\hermes\hermes-agent (per-user layout).
+    if (Get-Command hermes -ErrorAction SilentlyContinue) { return $true }
+    if (Test-Path "$env:LOCALAPPDATA\hermes\bin\hermes.cmd") { return $true }
+    if (Test-Path "$env:LOCALAPPDATA\hermes\bin\hermes.exe") { return $true }
+    return (Test-Path "$env:LOCALAPPDATA\hermes\hermes-agent")
+}
+
+function Install-Hermes {
+    Write-Host ""
+    Write-Box -Title "Hermes Agent" -Subtitle "Nous Research · hermes-agent.nousresearch.com" -Color $C.Accent
+    Write-Host ""
+
+    if (Test-HermesInstalled) {
+        Write-Status -Icon $Icon.Skip -Text "Hermes Agent — already installed" -Color $C.Existing
+        return [PSCustomObject]@{ Name = "Hermes Agent"; Status = "Already Installed" }
+    }
+
+    Write-Status -Icon $Icon.Arrow -Text "Downloading Hermes Agent installer…" -Color $C.Accent
+
+    $HermesLog = "$LogDir\19-Hermes_Agent.log"
+    $OutputFile = "$TempDir\hermes-install.ps1"
+
+    try {
+        Invoke-WebRequest -Uri $HermesInstallUrl -OutFile $OutputFile -UseBasicParsing
+    } catch {
+        Write-Status -Icon $Icon.Fail -Text "Failed to download Hermes installer — $($_.Exception.Message)" -Color $C.Error
+        return [PSCustomObject]@{ Name = "Hermes Agent"; Status = "Failed" }
+    }
+
+    Write-Status -Icon $Icon.Arrow -Text "Installing Hermes Agent (the installer provisions uv, Python, Node.js, ripgrep and ffmpeg automatically; this can take a while)…" -Color $C.Accent
+
+    try {
+        # The installer is interactive by design (provider / portal onboarding);
+        # stream its output so the prompts are visible in this console.
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $OutputFile 2>&1 |
+            Tee-Object -FilePath $HermesLog
+        $Exit = $LASTEXITCODE
+
+        if (($Exit -eq 0) -and (Test-HermesInstalled)) {
+            Write-Status -Icon $Icon.Ok -Text "Hermes Agent installed" -Color $C.Success
+            Write-Host "  Start it with: hermes   (docs: https://hermes-agent.nousresearch.com/)" -ForegroundColor $C.Muted
+            return [PSCustomObject]@{ Name = "Hermes Agent"; Status = "Installed" }
+        }
+
+        Write-Status -Icon $Icon.Fail -Text "Hermes Agent install failed (exit $Exit) — see $HermesLog" -Color $C.Error
+        return [PSCustomObject]@{ Name = "Hermes Agent"; Status = "Failed" }
+    } catch {
+        Write-Status -Icon $Icon.Fail -Text "Hermes Agent install failed — $($_.Exception.Message)" -Color $C.Error
+        return [PSCustomObject]@{ Name = "Hermes Agent"; Status = "Failed" }
+    }
+}
+
+function Remove-Hermes {
+    Write-Status -Icon $Icon.Arrow -Text "Removing Hermes Agent…" -Color $C.Warning
+
+    if (-not (Test-HermesInstalled)) {
+        Write-Status -Icon $Icon.Skip -Text "Hermes Agent — not installed" -Color $C.Existing
+        return
+    }
+
+    try {
+        # 'hermes uninstall' offers to keep ~/.hermes config for a future
+        # reinstall — run it interactively so the user can answer.
+        & hermes uninstall
+        if ($LASTEXITCODE -eq 0) {
+            Write-Status -Icon $Icon.Ok -Text "Hermes Agent removed" -Color $C.Success
+        } else {
+            Write-Status -Icon $Icon.Fail -Text "hermes uninstall returned exit $LASTEXITCODE" -Color $C.Error
+        }
+    } catch {
+        Write-Status -Icon $Icon.Fail -Text "Failed to remove Hermes Agent — $($_.Exception.Message)" -Color $C.Error
+    }
+}
+
+# ============================================================
+#  EVOFOX PHANTOM AIR MOUSE SOFTWARE (Amkette)
+# ============================================================
+
+# ${env:ProgramFiles(x86)} — braces required because of the parentheses in the name.
+$EvoFoxInstallDir = "${env:ProgramFiles(x86)}\EvoFox Phantom Air Gaming Mouse"
+
+function Test-EvoFoxInstalled {
+    # Registry is the source of truth (Inno Setup writes an Uninstall entry).
+    $Keys = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )
+    try {
+        $Entry = Get-ItemProperty $Keys -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -match "EvoFox Phantom" }
+        if ($Entry) { return $true }
+    } catch {}
+    # Fallback: the config app on disk.
+    return (Test-Path "$EvoFoxInstallDir\Gaming Mouse 3.0.exe")
+}
+
+function Install-EvoFox {
+    Write-Host ""
+    Write-Box -Title "EvoFox Phantom Air" -Subtitle "Amkette gaming mouse software" -Color $C.Accent
+    Write-Host ""
+
+    if (Test-EvoFoxInstalled) {
+        Write-Status -Icon $Icon.Skip -Text "EvoFox Phantom Air software — already installed" -Color $C.Existing
+        return [PSCustomObject]@{ Name = "EvoFox Phantom Air"; Status = "Already Installed" }
+    }
+
+    Write-Status -Icon $Icon.Arrow -Text "Downloading EvoFox Phantom Air software…" -Color $C.Accent
+
+    $EvoFoxLog = "$LogDir\20-EvoFox_Phantom_Air.log"
+    $OutputExe = "$TempDir\EvoFox_Phantom_Air_Gaming_Mouse.exe"
+
+    try {
+        Invoke-WebRequest -Uri $EvoFoxUrl -OutFile $OutputExe -UseBasicParsing
+    } catch {
+        Write-Status -Icon $Icon.Fail -Text "Failed to download — $($_.Exception.Message)" -Color $C.Error
+        Write-Host "  Manual download: $EvoFoxHelpPage" -ForegroundColor $C.Muted
+        return [PSCustomObject]@{ Name = "EvoFox Phantom Air"; Status = "Failed" }
+    }
+
+    Write-Status -Icon $Icon.Arrow -Text "Installing EvoFox Phantom Air software…" -Color $C.Accent
+
+    try {
+        # Inno Setup 5.5.9 installer — standard silent flags.
+        # NOTE: when the software is ALREADY installed this same exe flips into
+        # uninstall mode (OK = uninstall) — hence the installed-check above.
+        $Process = Start-Process -FilePath $OutputExe `
+            -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/LOG=`"$EvoFoxLog`"" `
+            -Wait -PassThru
+
+        if (($Process.ExitCode -eq 0) -and (Test-EvoFoxInstalled)) {
+            Write-Status -Icon $Icon.Ok -Text "EvoFox Phantom Air software installed" -Color $C.Success
+            Write-Host "  Configure the mouse with: $EvoFoxInstallDir\Gaming Mouse 3.0.exe" -ForegroundColor $C.Muted
+            return [PSCustomObject]@{ Name = "EvoFox Phantom Air"; Status = "Installed" }
+        }
+
+        Write-Status -Icon $Icon.Fail -Text "Install failed (exit $($Process.ExitCode)) — see $EvoFoxLog" -Color $C.Error
+        return [PSCustomObject]@{ Name = "EvoFox Phantom Air"; Status = "Failed" }
+    } catch {
+        Write-Status -Icon $Icon.Fail -Text "Install failed — $($_.Exception.Message)" -Color $C.Error
+        return [PSCustomObject]@{ Name = "EvoFox Phantom Air"; Status = "Failed" }
+    }
+}
+
+function Remove-EvoFox {
+    Write-Status -Icon $Icon.Arrow -Text "Removing EvoFox Phantom Air software…" -Color $C.Warning
+
+    if (-not (Test-EvoFoxInstalled)) {
+        Write-Status -Icon $Icon.Skip -Text "EvoFox Phantom Air software — not installed" -Color $C.Existing
+        return
+    }
+
+    try {
+        $Keys = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+        )
+        $Entry = Get-ItemProperty $Keys -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -match "EvoFox Phantom" }
+
+        $Uninstaller = if ($Entry -and $Entry.UninstallString) {
+            # Strip the surrounding quotes Inno writes into the registry value.
+            $Entry.UninstallString.Trim('"')
+        } else {
+            "$EvoFoxInstallDir\unins000.exe"
+        }
+
+        if (-not (Test-Path $Uninstaller)) {
+            Write-Status -Icon $Icon.Fail -Text "Uninstaller not found at $Uninstaller" -Color $C.Error
+            return
+        }
+
+        # Inno: /SILENT shows a small progress bar, /VERYSILENT shows nothing.
+        $Process = Start-Process -FilePath $Uninstaller -ArgumentList "/SILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+        if ($Process.ExitCode -eq 0) {
+            Write-Status -Icon $Icon.Ok -Text "EvoFox Phantom Air software removed" -Color $C.Success
+        } else {
+            Write-Status -Icon $Icon.Fail -Text "Uninstall returned exit $($Process.ExitCode)" -Color $C.Error
+        }
+    } catch {
+        Write-Status -Icon $Icon.Fail -Text "Failed to remove — $($_.Exception.Message)" -Color $C.Error
+    }
+}
+
+# ============================================================
 #  DEVELOPMENT ENVIRONMENT
 # ============================================================
 
@@ -593,6 +818,12 @@ function Start-Installation {
         if ($App.ID -eq "OFFICE") {
             Write-ProgressBar -Current $Current -Total $Total -Activity $App.Name
             $Result = Install-Office
+        } elseif ($App.ID -eq "HERMES") {
+            Write-ProgressBar -Current $Current -Total $Total -Activity $App.Name
+            $Result = Install-Hermes
+        } elseif ($App.ID -eq "EVOFOX") {
+            Write-ProgressBar -Current $Current -Total $Total -Activity $App.Name
+            $Result = Install-EvoFox
         } else {
             $Result = Install-App -App $App -Current $Current -Total $Total -StartTime $StartTime
         }
@@ -790,6 +1021,81 @@ function Remove-Applications {
 }
 
 # ============================================================
+#  WINUTIL (Chris Titus) — tweak / debloat GUI
+# ============================================================
+
+function Start-WinUtil {
+    Write-Header
+    Write-Panel -Title "CHRIS TITUS WINUTIL" -Subtitle "Windows tweaks · debloat · updates config" -Color $C.Accent
+    Write-Host ""
+    Write-Host "  Launching WinUtil in an elevated child PowerShell session…" -ForegroundColor $C.Title
+    Write-Host "  The WinUtil GUI will open in its own window. When you close it," -ForegroundColor $C.Muted
+    Write-Host "  you will return to this menu." -ForegroundColor $C.Muted
+    Write-Host ""
+
+    # Run in a separate elevated window so the WPF GUI gets a clean console
+    # and any tweaks it applies don't fight this script's transcript/log.
+    try {
+        # -Verb RunAs would prompt UAC again; this script is already elevated,
+        # so the child inherits admin rights without a UAC prompt.
+        $Proc = Start-Process powershell.exe -ArgumentList @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+            "irm $WinUtilUrl | iex"
+        ) -PassThru -Wait
+
+        if ($Proc.ExitCode -eq 0) {
+            Write-Status -Icon $Icon.Ok -Text "WinUtil session ended" -Color $C.Success
+        } else {
+            Write-Status -Icon $Icon.Warn -Text "WinUtil exited with code $($Proc.ExitCode) (non-zero can be normal when tweaks requested a reboot)" -Color $C.Warning
+        }
+    } catch {
+        Write-Status -Icon $Icon.Fail -Text "Failed to launch WinUtil — $($_.Exception.Message)" -Color $C.Error
+        Write-Host "  You can run it manually: irm $WinUtilUrl | iex" -ForegroundColor $C.Muted
+    }
+
+    Write-Host ""
+    Read-Host "Press Enter to return to the main menu"
+}
+
+# ============================================================
+#  MASSGRAVE (Microsoft Activation Scripts) — activation menu
+# ============================================================
+
+function Start-MassGrave {
+    Write-Header
+    Write-Panel -Title "MASSGRAVE — MICROSOFT ACTIVATION SCRIPTS" -Subtitle "Windows / Office activation" -Color $C.Accent
+    Write-Host ""
+    Write-Host "  Launching MAS in an elevated child PowerShell session…" -ForegroundColor $C.Title
+    Write-Host "  In the menu that appears, type the number corresponding" -ForegroundColor $C.Muted
+    Write-Host "  to one of the Green options (recommended)." -ForegroundColor $C.Muted
+    Write-Host "  When you close it, you will return to this menu." -ForegroundColor $C.Muted
+    Write-Host ""
+
+    # Run in a separate elevated window so the interactive MAS menu gets a
+    # clean console and doesn't fight this script's transcript/log.
+    try {
+        # This script is already elevated, so the child inherits admin
+        # rights without a UAC prompt.
+        $Proc = Start-Process powershell.exe -ArgumentList @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+            "irm $MassGraveUrl | iex"
+        ) -PassThru -Wait
+
+        if ($Proc.ExitCode -eq 0) {
+            Write-Status -Icon $Icon.Ok -Text "MAS session ended" -Color $C.Success
+        } else {
+            Write-Status -Icon $Icon.Warn -Text "MAS exited with code $($Proc.ExitCode) (non-zero can be normal)" -Color $C.Warning
+        }
+    } catch {
+        Write-Status -Icon $Icon.Fail -Text "Failed to launch MAS — $($_.Exception.Message)" -Color $C.Error
+        Write-Host "  You can run it manually: irm $MassGraveUrl | iex" -ForegroundColor $C.Muted
+    }
+
+    Write-Host ""
+    Read-Host "Press Enter to return to the main menu"
+}
+
+# ============================================================
 #  STARTUP CHECKS
 # ============================================================
 
@@ -834,7 +1140,13 @@ while ($true) {
     Write-Host "  [4]  Retry Failed Installations" -ForegroundColor $C.Warning
     Write-Host "       Retry the previous failures" -ForegroundColor $C.Muted
     Write-Host ""
-    Write-Host "  [5]  Exit"                       -ForegroundColor $C.Muted
+    Write-Host "  [5]  WinUtil (Chris Titus)"       -ForegroundColor $C.Accent
+    Write-Host "       Tweaks / debloat / updates config" -ForegroundColor $C.Muted
+    Write-Host ""
+    Write-Host "  [6]  MassGrave Activation"       -ForegroundColor $C.Accent
+    Write-Host "       Windows / Office activation" -ForegroundColor $C.Muted
+    Write-Host ""
+    Write-Host "  [7]  Exit"                       -ForegroundColor $C.Muted
     Write-Host ""
 
     $MenuChoice = Read-Host "  Select an option"
@@ -843,7 +1155,9 @@ while ($true) {
         "2" { Manual-Installation }
         "3" { Remove-Applications }
         "4" { Retry-Failed; Read-Host "`nPress Enter to continue" }
-        "5" {
+        "5" { Start-WinUtil }
+        "6" { Start-MassGrave }
+        "7" {
             try { Stop-Transcript | Out-Null } catch {}
             Write-Host ""
             Write-Status -Icon $Icon.Ok -Text "Setup finished. Goodbye!" -Color $C.Success
