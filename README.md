@@ -2,9 +2,9 @@
 
 # 🪟 Fresh Windows Setup
 
-**An interactive, menu-driven workstation bootstrapper for freshly installed Windows 11/10 machines.**
+**A minimal, GUI-driven workstation bootstrapper for freshly installed Windows 11/10 machines.**
 
-One elevated PowerShell script installs your entire daily-driver toolkit — browsers, dev tools, messaging, Microsoft 365, and more — with live progress bars, ETAs, per-app logs, and a full summary at the end.
+One elevated PowerShell script installs my entire daily-driver toolkit — browsers, dev tools, messaging, Microsoft 365, and more — through a clean WPF interface with live progress and per-app status.
 
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)](https://github.com/truepushkar/fresh-windows)
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-5391FE?logo=powershell)](https://github.com/PowerShell/PowerShell)
@@ -14,20 +14,31 @@ One elevated PowerShell script installs your entire daily-driver toolkit — bro
 
 ---
 
+> [!IMPORTANT]
+> **This list is my personal setup.** The apps, defaults, and tweaks in this repo are exactly what I install on a fresh Windows machine — nothing more, nothing less. It is not meant to be a universal installer.
+>
+> **Want your own version? [Fork this repo](https://github.com/truepushkar/fresh-windows/fork) and modify it** — edit the `$Apps` array in `setup.ps1`, adjust the system setup steps, and you'll have a one-command bootstrap for *your* setup. More detail in [🔧 Making It Yours](#-making-it-yours).
+
+---
+
 ## ⚡ Quick Start
 
-Open **PowerShell as Administrator**, then run the launcher:
+### Run straight from GitHub (no cloning)
+
+Open **PowerShell as Administrator** and paste:
+
+```powershell
+irm https://raw.githubusercontent.com/truepushkar/fresh-windows/main/setup.ps1 | iex
+```
+
+That's it — the GUI launches immediately.
+
+### Or clone the repo
 
 ```powershell
 git clone https://github.com/truepushkar/fresh-windows.git
-cd fresh-windows\INSTALLATION
+cd fresh-windows
 .\Install-WindowsSetup.bat
-```
-
-Or, if you just want the raw script with no cloning:
-
-```powershell
-irm https://raw.githubusercontent.com/truepushkar/fresh-windows/main/INSTALLATION/setup.ps1 | iex
 ```
 
 > **Note:** the script refuses to run unelevated — it needs Administrator rights for machine-wide installs, registry tweaks, and launching WinUtil/MAS without a second UAC prompt.
@@ -36,37 +47,15 @@ irm https://raw.githubusercontent.com/truepushkar/fresh-windows/main/INSTALLATIO
 
 ## 🖥️ The Interface
 
-A fully interactive terminal UI — no flags to memorize, no config files to edit:
+A minimal dark WPF window — no flags to memorize, no config files to edit:
 
-```
-                     FRESH WINDOWS SETUP
-            Automated Windows workstation bootstrapper
+- **Install / Remove** — checkbox grid with search and category filters; select apps, hit one button
+- **System Setup** — dev-environment configuration in one click
+- **Export** — back up Windows preferences for your next install
+- **Tools** — launch WinUtil and MAS without leaving the app
+- **Logs** — every run writes a transcript to `C:\FreshWindowsSetup\Logs\`
 
-  ╭──────────────────────────── MAIN MENU ────────────────────────────╮
-  │                        Choose an operation                         │
-  ╰────────────────────────────────────────────────────────────────────╯
-
-  [1]  Full Installation
-       Complete workstation setup
-
-  [2]  Manual Installation
-       Select applications
-
-  [3]  Remove Applications
-       Uninstall selected apps
-
-  ...
-```
-
-Each install shows a live animated progress bar with per-app status, elapsed time, and ETA:
-
-```
-  ┌─ Progress ────────────────────────────────────────────┐
-  │ ███████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-  │  33%    5 / 15                                       │
-  └──────────────────────────────────────────────────────┘
-  ➜ Installing Visual Studio Code…
-```
+The bottom panel shows a live progress bar, current activity, and a streaming status log while installs run in a background worker (the window stays responsive).
 
 ---
 
@@ -108,13 +97,13 @@ Each install shows a live animated progress bar with per-app status, elapsed tim
 
 ## 🧩 Integrated Tools
 
-Two extra entries in the main menu launch trusted external utilities (elevated, no second UAC prompt):
+Two entries in the Tools tab launch trusted external utilities (elevated, no second UAC prompt):
 
-### [5] WinUtil — Chris Titus Tech
+### WinUtil — Chris Titus Tech
 Tweaks, debloating, update configuration, and more, via a GUI:
 > https://christitus.com/win
 
-### [6] MassGrave — Microsoft Activation Scripts
+### MassGrave — Microsoft Activation Scripts
 Windows / Office activation via an interactive menu:
 > https://get.activated.win
 
@@ -122,12 +111,12 @@ Windows / Office activation via an interactive menu:
 
 ## ✨ Features
 
-- 🎨 **Interactive TUI** — boxed panels, color-coded status icons, centered banner
-- 📊 **Live progress** — animated bar, elapsed time, ETA, per-app install status
+- 🎨 **Minimal GUI** — clean WPF interface, checkbox grid, search + category filters
+- 📊 **Live progress** — animated bar, per-app install status, streaming log
+- 🔄 **Non-blocking** — installs run in a background worker; the window never freezes
 - 🔁 **Idempotent** — detects already-installed apps and skips them gracefully
 - 🛡️ **Robust fallbacks** — Spotify handles the `0x8A150056` elevation refusal (per-user retry → direct Squirrel installer); Office auto-resolves a fresh ODT download link if the hard-coded one goes stale
 - 🪵 **Full logging** — every install/uninstall writes to `C:\FreshWindowsSetup\Logs\` plus a session transcript
-- ♻️ **Retry failed installs** — dedicated menu option replays only the failures
 - 🧹 **Uninstall mode** — selective or bulk removal of anything the script installed (Office via ODT remove config, Hermes via `hermes uninstall`, EvoFox via its Inno uninstaller)
 
 ---
@@ -136,10 +125,8 @@ Windows / Office activation via an interactive menu:
 
 ```
 fresh-windows/
-├── INSTALLATION/
-│   ├── Install-WindowsSetup.bat   ← double-click launcher (auto-elevates via UAC)
-│   └── setup.ps1          ← the main interactive script
-├── WALLPAPER/                     ← a small curated wallpaper collection
+├── Install-WindowsSetup.bat   ← double-click launcher
+├── setup.ps1                  ← the main script (installer + GUI)
 └── README.md
 ```
 
@@ -149,15 +136,28 @@ fresh-windows/
 - **WinGet** (Microsoft "App Installer" — preinstalled on modern Windows 11; the script checks and exits with instructions if missing)
 - Administrator rights (UAC prompt appears when you launch the `.bat`)
 
-## 🔧 Customizing
+## 🔧 Making It Yours
 
-Want a different app list? Edit the `$Apps` array near the top of `setup.ps1`:
+This repo is **my personal setup**, published so others can reuse the pattern. It is not a general-purpose installer — the app list, Git identity, Python packages, and mouse software are all specific to me.
 
-```powershell
-[PSCustomObject]@{ Number = 21; Name = "OBS Studio"; ID = "OBSProject.OBS"; Source = "winget" }
-```
+If you want the same one-command fresh-machine bootstrap for your own toolkit:
 
-WinGet IDs can be found with `winget search <name>`.
+1. **Fork the repo** (top-right button, or [direct link](https://github.com/truepushkar/fresh-windows/fork))
+2. **Edit the `$Apps` array** near the top of `setup.ps1`:
+
+   ```powershell
+   [PSCustomObject]@{ Number = 21; Name = "OBS Studio"; ID = "OBSProject.OBS"; Source = "winget" }
+   ```
+
+   WinGet IDs can be found with `winget search <name>`. Remove apps you don't want; renumber as needed.
+3. **Adjust the dev-environment setup** (`Configure-Development`) — the Python packages, npm globals, and Git identity are mine, so change them to yours.
+4. **Commit and push** — your fork now has its own one-liner:
+
+   ```powershell
+   irm https://raw.githubusercontent.com/<you>/fresh-windows/main/setup.ps1 | iex
+   ```
+
+That's the whole point of the repo: fork it, swap in your list, and never hand-install a fresh machine again.
 
 ---
 

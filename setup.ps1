@@ -1242,32 +1242,6 @@ function New-CardBorder {
     return $b
 }
 
-function Get-AppGlyph([string]$Name) {
-    switch -Regex ($Name) {
-        "Telegram" { return "✈" }
-        "PowerToys" { return "▦" }
-        "Python" { return "🐍" }
-        "Visual Studio Code" { return "</>" }
-        "Spotify" { return "●" }
-        "WhatsApp" { return "◔" }
-        "Brave" { return "♢" }
-        "Chrome" { return "●" }
-        "^Git$" { return "◆" }
-        "Cloudflare" { return "☁" }
-        "Node" { return "JS" }
-        "7-Zip" { return "7z" }
-        "AB Download" { return "↓" }
-        "VLC" { return "▲" }
-        "FFmpeg" { return "F" }
-        "GitHub" { return "GH" }
-        "PowerShell" { return "PS" }
-        "Microsoft 365" { return "M" }
-        "Hermes" { return "H" }
-        "EvoFox" { return "E" }
-        default { return "•" }
-    }
-}
-
 function Get-AppSubtitle([PSCustomObject]$App) {
     switch -Regex ($App.Name) {
         "Telegram|WhatsApp" { return "Messaging app" }
@@ -1322,7 +1296,6 @@ function Set-GuiProgress([int]$Current,[int]$Total,[string]$Activity) {
     $script:Gui.ProgressBar.Value = $pct
     $script:Gui.ProgressText.Text = "$Current / $Total  ($pct%)"
     $script:Gui.Activity.Text = if ($Activity) { $Activity } else { 'Ready' }
-    $script:Gui.StatusText.Text = if ($Activity) { $Activity } else { 'Ready' }
 }
 
 function Set-AppStatus([string]$Line) {
@@ -1363,9 +1336,9 @@ function Update-SelectionCount {
 function New-AppCard([PSCustomObject]$App,[bool]$RemoveMode=$false) {
     $card = New-Object System.Windows.Controls.Border
     $card.Width = 300
-    $card.MinHeight = 82
+    $card.MinHeight = 58
     $card.Margin = '0,0,10,10'
-    $card.Padding = '12'
+    $card.Padding = '12,10'
     $card.Background = $script:Brush.Card
     $card.BorderBrush = $script:Brush.Border
     $card.BorderThickness = 1
@@ -1376,63 +1349,39 @@ function New-AppCard([PSCustomObject]$App,[bool]$RemoveMode=$false) {
 
     $g = New-Object System.Windows.Controls.Grid
     $g.ColumnDefinitions.Add((New-Object System.Windows.Controls.ColumnDefinition -Property @{Width='Auto'}))
-    $g.ColumnDefinitions.Add((New-Object System.Windows.Controls.ColumnDefinition -Property @{Width='Auto'}))
     $g.ColumnDefinitions.Add((New-Object System.Windows.Controls.ColumnDefinition -Property @{Width='*'}))
-    $g.ColumnDefinitions.Add((New-Object System.Windows.Controls.ColumnDefinition -Property @{Width='Auto'}))
 
     $cb = New-Object System.Windows.Controls.CheckBox
-    $cb.Width = 22
-    $cb.VerticalAlignment = 'Top'
-    $cb.Margin = '0,3,10,0'
+    $cb.VerticalAlignment = 'Center'
+    $cb.Margin = '0,0,10,0'
     $cb.Tag = $App.Number
     $cb.ToolTip = if ($RemoveMode) { "Select $($App.Name) for removal" } else { "Select $($App.Name)" }
     $cb.Add_Checked({
         $n=[int]$this.Tag
-        if ($script:Gui.AppStates.ContainsKey($n)) { $script:Gui.AppStates[$n].Status.Text='Selected'; $script:Gui.AppStates[$n].Status.Foreground=$script:Brush.Text }
+        if ($script:Gui.AppStates.ContainsKey($n)) { $script:Gui.AppStates[$n].Status.Foreground=$script:Brush.Text }
         Update-SelectionCount
     })
     $cb.Add_Unchecked({
         $n=[int]$this.Tag
-        if ($script:Gui.AppStates.ContainsKey($n)) { $script:Gui.AppStates[$n].Status.Text='Not selected'; $script:Gui.AppStates[$n].Status.Foreground=$script:Brush.Muted }
+        if ($script:Gui.AppStates.ContainsKey($n)) { $script:Gui.AppStates[$n].Status.Text=''; $script:Gui.AppStates[$n].Status.Foreground=$script:Brush.Muted }
         Update-SelectionCount
     })
     [void]$g.Children.Add($cb)
 
-    $icon = New-Object System.Windows.Controls.Border
-    $icon.Width = 42; $icon.Height = 42
-    $icon.CornerRadius = '6'
-    $icon.Background = $script:Brush.Card2
-    $icon.Margin = '0,0,10,0'
-    $icon.VerticalAlignment = 'Top'
-    $glyph = New-Object System.Windows.Controls.TextBlock
-    $glyph.Text = Get-AppGlyph $App.Name
-    $glyph.FontSize = 15
-    $glyph.FontWeight = 'Bold'
-    $glyph.Foreground = $script:Brush.Text
-    $glyph.HorizontalAlignment = 'Center'
-    $glyph.VerticalAlignment = 'Center'
-    $icon.Child = $glyph
-    [System.Windows.Controls.Grid]::SetColumn($icon,1)
-    [void]$g.Children.Add($icon)
-
     $info = New-Object System.Windows.Controls.StackPanel
-    $info.Margin = '10,0,10,0'
-    [System.Windows.Controls.Grid]::SetColumn($info,2)
+    $info.Margin = '0,0,10,0'
+    $info.VerticalAlignment = 'Center'
+    [System.Windows.Controls.Grid]::SetColumn($info,1)
     $title = New-TextBlock $App.Name 13 'SemiBold'
     $title.TextWrapping = 'Wrap'
     $sub = New-TextBlock (Get-AppSubtitle $App) 10 'Normal' $script:Brush.Muted
     $sub.Margin = '0,3,0,0'
-    $status = New-TextBlock 'Not selected' 10 'SemiBold' $script:Brush.Muted
-    $status.Margin = '0,6,0,0'
+    $status = New-TextBlock '' 10 'SemiBold' $script:Brush.Muted
+    $status.Margin = '0,4,0,0'
     $info.Children.Add($title) | Out-Null
     $info.Children.Add($sub) | Out-Null
     $info.Children.Add($status) | Out-Null
     [void]$g.Children.Add($info)
-
-    $cat = New-TextBlock (Get-AppCategory $App) 9 'SemiBold' $script:Brush.Muted
-    $cat.VerticalAlignment = 'Top'
-    [System.Windows.Controls.Grid]::SetColumn($cat,3)
-    [void]$g.Children.Add($cat)
 
     $card.Child = $g
     $state = [pscustomobject]@{ App=$App; Card=$card; Check=$cb; Status=$status; Category=(Get-AppCategory $App) }
@@ -1497,7 +1446,6 @@ function Start-GuiWorker([string]$Mode,[array]$Numbers) {
     $script:Gui.ProgressText.Text = "0 / $(@($Numbers).Count)  (0%)"
     $script:Gui.ProgressBar.Value = 0
     $script:Gui.Activity.Text = if ($modeArg -eq 'Remove') { 'Preparing removal...' } else { 'Preparing installation...' }
-    $script:Gui.StatusText.Text = $script:Gui.Activity.Text
     Set-GuiButtonsEnabled $false
 }
 
@@ -1532,10 +1480,8 @@ function Update-GuiWorker {
             $script:Gui.ProgressBar.Value = 100
             $script:Gui.ProgressText.Text = 'Complete'
             $script:Gui.Activity.Text = if ($script:Gui.CurrentMode -eq 'Remove') { 'Removal completed.' } else { 'Installation completed.' }
-            $script:Gui.StatusText.Text = $script:Gui.Activity.Text
         } else {
             $script:Gui.Activity.Text = "Operation failed (exit $exit)."
-            $script:Gui.StatusText.Text = $script:Gui.Activity.Text
         }
         $script:Gui.Worker = $null
         $script:Gui.WorkerOut = $null
@@ -1581,8 +1527,8 @@ $Xaml = @'
             <Setter Property="Foreground" Value="{StaticResource Muted}"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Padding" Value="18,11"/>
-            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="Padding" Value="16,10"/>
+            <Setter Property="Margin" Value="0,0,2,0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
@@ -1591,12 +1537,11 @@ $Xaml = @'
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="TabBorder" Property="Background" Value="#17202B"/>
                                 <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource Accent}"/>
                                 <Setter Property="Foreground" Value="{StaticResource Text}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="TabBorder" Property="Background" Value="#141B23"/>
+                                <Setter Property="Foreground" Value="{StaticResource Text}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -1666,14 +1611,14 @@ $Xaml = @'
                 <Grid Margin="0,0,0,12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <StackPanel>
-                        <TextBlock Name="PageTitle" Text="Install Applications" FontSize="24" FontWeight="Bold"/>
-                        <TextBlock Name="PageSubtitle" Text="Select applications and install them through WinGet or the configured installer." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,0"/>
+                        <TextBlock Name="PageTitle" Text="Install Applications" FontSize="20" FontWeight="SemiBold"/>
+                        <TextBlock Name="PageSubtitle" Text="Select apps, then install with WinGet." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,0"/>
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Name="SelectionText" Text="0 selected" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,10,0"/>
                         <Button Name="SelectAllButton" Content="Select All" Style="{StaticResource ActionButton}"/>
                         <Button Name="ClearAllButton" Content="Clear" Style="{StaticResource ActionButton}"/>
-                        <Button Name="InstallEverythingButton" Content="Install Everything" Style="{StaticResource PrimaryButton}"/>
+                        <Button Name="InstallSelectedButton" Content="Install Selected" Style="{StaticResource PrimaryButton}"/>
                     </StackPanel>
                 </Grid>
                 <Grid Grid.Row="1" Margin="0,0,0,12">
@@ -1703,8 +1648,8 @@ $Xaml = @'
             <Grid Name="RemovePage" Visibility="Collapsed">
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                 <StackPanel Margin="0,0,0,14">
-                    <TextBlock Text="Remove Applications" FontSize="24" FontWeight="Bold"/>
-                    <TextBlock Text="Select applications to uninstall from this Windows installation." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,0"/>
+                    <TextBlock Text="Remove Applications" FontSize="20" FontWeight="SemiBold"/>
+                    <TextBlock Text="Select apps to uninstall from this machine." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,0"/>
                     <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                         <Button Name="RemoveSelectAllButton" Content="Select All" Style="{StaticResource ActionButton}"/>
                         <Button Name="RemoveClearAllButton" Content="Clear" Style="{StaticResource ActionButton}"/>
@@ -1716,12 +1661,12 @@ $Xaml = @'
 
             <Grid Name="SystemPage" Visibility="Collapsed">
                 <StackPanel>
-                    <TextBlock Text="System Setup" FontSize="24" FontWeight="Bold"/>
-                    <TextBlock Text="Configure the development environment and common Windows settings." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,18"/>
+                    <TextBlock Text="System Setup" FontSize="20" FontWeight="SemiBold"/>
+                    <TextBlock Text="Python tooling, Node, Git config, long paths and other defaults." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,18"/>
                     <Border Background="{StaticResource Card}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="6" Padding="18" MaxWidth="850" HorizontalAlignment="Left">
                         <StackPanel>
-                            <TextBlock Text="Development Environment" FontSize="17" FontWeight="SemiBold"/>
-                            <TextBlock Text="Update Python tooling, configure Node/Git and apply the setup routines already present in this script." FontSize="12" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            <TextBlock Text="Development Environment" FontSize="15" FontWeight="SemiBold"/>
+                            <TextBlock Text="Upgrades pip/setuptools/wheel, installs common Python packages, pnpm and yarn, configures Git, enables long paths and UTF-8." FontSize="12" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                             <Button Name="SystemSetupButton" Content="Run System Setup" Style="{StaticResource PrimaryButton}" Width="170" HorizontalAlignment="Left" Margin="0,18,0,0"/>
                         </StackPanel>
                     </Border>
@@ -1730,12 +1675,12 @@ $Xaml = @'
 
             <Grid Name="ExportPage" Visibility="Collapsed">
                 <StackPanel>
-                    <TextBlock Text="Export Settings" FontSize="24" FontWeight="Bold"/>
-                    <TextBlock Text="Back up useful Windows preferences for your next installation." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,18"/>
+                    <TextBlock Text="Export Settings" FontSize="20" FontWeight="SemiBold"/>
+                    <TextBlock Text="Back up Windows preferences for your next install." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,18"/>
                     <Border Background="{StaticResource Card}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="6" Padding="18" MaxWidth="850" HorizontalAlignment="Left">
                         <StackPanel>
-                            <TextBlock Text="Windows configuration backup" FontSize="17" FontWeight="SemiBold"/>
-                            <TextBlock Text="Explorer, desktop, themes, optional features and wallpaper information." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,6,0,0"/>
+                            <TextBlock Text="Windows configuration backup" FontSize="15" FontWeight="SemiBold"/>
+                            <TextBlock Text="Explorer, desktop, themes, optional features and wallpaper." FontSize="12" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                             <Button Name="ExportButton" Content="Export Settings" Style="{StaticResource PrimaryButton}" Width="160" HorizontalAlignment="Left" Margin="0,18,0,0"/>
                         </StackPanel>
                     </Border>
@@ -1744,14 +1689,14 @@ $Xaml = @'
 
             <Grid Name="ToolsPage" Visibility="Collapsed">
                 <StackPanel>
-                    <TextBlock Text="Tools" FontSize="24" FontWeight="Bold"/>
-                    <TextBlock Text="Launch external Windows utilities without leaving Fresh Windows Setup." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,18"/>
+                    <TextBlock Text="Tools" FontSize="20" FontWeight="SemiBold"/>
+                    <TextBlock Text="Launch external Windows utilities." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,18"/>
                     <WrapPanel>
-                        <Border Width="320" Height="150" Background="{StaticResource Card}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,0,10,10">
-                            <StackPanel><TextBlock Text="Chris Titus Tech WinUtil" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="Windows tweaks, debloat, fixes and updates." FontSize="11" Foreground="{StaticResource Muted}" Margin="0,5,0,0"/><Button Name="WinUtilButton" Content="Open WinUtil" Style="{StaticResource PrimaryButton}" Width="125" HorizontalAlignment="Left" Margin="0,18,0,0"/></StackPanel>
+                        <Border Width="320" Height="140" Background="{StaticResource Card}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,0,10,10">
+                            <StackPanel><TextBlock Text="Chris Titus Tech WinUtil" FontSize="15" FontWeight="SemiBold"/><TextBlock Text="Windows tweaks, debloat, fixes and updates." FontSize="11" Foreground="{StaticResource Muted}" Margin="0,5,0,0"/><Button Name="WinUtilButton" Content="Open WinUtil" Style="{StaticResource PrimaryButton}" Width="125" HorizontalAlignment="Left" Margin="0,16,0,0"/></StackPanel>
                         </Border>
-                        <Border Width="320" Height="150" Background="{StaticResource Card}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,0,10,10">
-                            <StackPanel><TextBlock Text="Microsoft Activation Scripts" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="Open the MAS interactive menu." FontSize="11" Foreground="{StaticResource Muted}" Margin="0,5,0,0"/><Button Name="MASButton" Content="Open MAS" Style="{StaticResource ActionButton}" Width="125" HorizontalAlignment="Left" Margin="0,18,0,0"/></StackPanel>
+                        <Border Width="320" Height="140" Background="{StaticResource Card}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,0,10,10">
+                            <StackPanel><TextBlock Text="Microsoft Activation Scripts" FontSize="15" FontWeight="SemiBold"/><TextBlock Text="Open the MAS interactive menu." FontSize="11" Foreground="{StaticResource Muted}" Margin="0,5,0,0"/><Button Name="MASButton" Content="Open MAS" Style="{StaticResource ActionButton}" Width="125" HorizontalAlignment="Left" Margin="0,16,0,0"/></StackPanel>
                         </Border>
                     </WrapPanel>
                 </StackPanel>
@@ -1759,15 +1704,14 @@ $Xaml = @'
 
             <Grid Name="LogsPage" Visibility="Collapsed">
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                <StackPanel Margin="0,0,0,12"><TextBlock Text="Logs" FontSize="24" FontWeight="Bold"/><TextBlock Text="Recent setup transcripts and worker logs." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,0"/></StackPanel>
+                <StackPanel Margin="0,0,0,12"><TextBlock Text="Logs" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="Setup transcripts in C:\FreshWindowsSetup\Logs." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,0"/></StackPanel>
                 <TextBox Name="LogsList" Grid.Row="1" IsReadOnly="True" TextWrapping="NoWrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Background="#0D1218" Foreground="{StaticResource Muted}" BorderBrush="{StaticResource Border}" BorderThickness="1" FontFamily="Cascadia Mono" FontSize="11" Padding="12"/>
             </Grid>
 
             <Grid Name="AboutPage" Visibility="Collapsed">
                 <StackPanel>
-                    <TextBlock Text="About" FontSize="24" FontWeight="Bold"/>
-                    <TextBlock Text="Fresh Windows Setup" FontSize="16" FontWeight="SemiBold" Margin="0,18,0,0"/>
-                    <TextBlock Text="A PowerShell + WPF workstation bootstrapper using WinGet and the existing setup routines in this repository." FontSize="12" Foreground="{StaticResource Muted}" TextWrapping="Wrap" MaxWidth="700" Margin="0,5,0,0"/>
+                    <TextBlock Text="About" FontSize="20" FontWeight="SemiBold"/>
+                    <TextBlock Text="A minimal PowerShell + WPF bootstrapper built on WinGet." FontSize="12" Foreground="{StaticResource Muted}" TextWrapping="Wrap" MaxWidth="700" Margin="0,5,0,0"/>
                     <TextBlock Text="Made by Pushkar Singh" FontSize="13" FontWeight="SemiBold" Margin="0,18,0,0"/>
                     <TextBlock Text="github.com/truepushkar" FontSize="11" Foreground="{StaticResource Muted}"/>
                 </StackPanel>
@@ -1780,20 +1724,14 @@ $Xaml = @'
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <TextBlock Text="Progress" FontSize="12" FontWeight="SemiBold"/>
-                    <TextBlock Name="ProgressText" Grid.Column="1" Text="0 / 0  (0%)" FontSize="11" Foreground="{StaticResource Muted}"/>
+                    <TextBlock Name="Activity" Text="Ready" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Name="ProgressText" Grid.Column="1" Text="0 / 0  (0%)" FontSize="11" Foreground="{StaticResource Muted}" Margin="10,0,0,0"/>
                 </Grid>
-                <ProgressBar Name="ProgressBar" Grid.Row="1" Height="7" Minimum="0" Maximum="100" Value="0" Margin="0,6,0,8" Background="#202833" Foreground="{StaticResource Accent}"/>
-                <TextBlock Name="Activity" Grid.Row="2" Text="Ready" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                <TextBlock Name="StatusText" Grid.Row="3" Text="Ready" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
-                <TextBlock Text="Status Log" Grid.Row="4" FontSize="12" FontWeight="SemiBold" Margin="0,10,0,6"/>
-                <TextBox Name="LogBox" Grid.Row="5" Height="72" IsReadOnly="True" TextWrapping="NoWrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Background="#090D12" Foreground="#A9B5C3" BorderBrush="{StaticResource Border}" BorderThickness="1" FontFamily="Cascadia Mono" FontSize="10" Padding="8"/>
+                <ProgressBar Name="ProgressBar" Grid.Row="1" Height="4" Minimum="0" Maximum="100" Value="0" Margin="0,8,0,10" Background="#202833" Foreground="{StaticResource Accent}"/>
+                <TextBox Name="LogBox" Grid.Row="2" Height="72" IsReadOnly="True" TextWrapping="NoWrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Background="#090D12" Foreground="#A9B5C3" BorderBrush="{StaticResource Border}" BorderThickness="1" FontFamily="Cascadia Mono" FontSize="10" Padding="8"/>
             </Grid>
         </Border>
     </Grid>
@@ -1834,7 +1772,6 @@ $script:Gui.SelectionText = $window.SelectionText
 $script:Gui.ProgressBar = $window.ProgressBar
 $script:Gui.ProgressText = $window.ProgressText
 $script:Gui.Activity = $window.Activity
-$script:Gui.StatusText = $window.StatusText
 $script:Gui.LogBox = $window.LogBox
 
 # Build both install/remove catalogs once. Pages are shown/hidden rather than rebuilt.
@@ -1882,10 +1819,15 @@ $script:Gui.Category.Tag = 'All'
 
 $window.SelectAllButton.Add_Click({ Set-AllChecks $true })
 $window.ClearAllButton.Add_Click({ Set-AllChecks $false })
-$window.InstallEverythingButton.Add_Click({
+$window.InstallSelectedButton.Add_Click({
     $script:Gui.AppStates = $script:Gui.InstallStates
     $script:Gui.CheckBoxes = $script:Gui.InstallChecks
-    Start-GuiWorker 'Install' @($Apps.Number)
+    $numbers = Get-SelectedNumbers
+    if (@($numbers).Count -eq 0) {
+        Set-AllChecks $true
+        $numbers = @($Apps.Number)
+    }
+    Start-GuiWorker 'Install' $numbers
 })
 $window.RemoveSelectAllButton.Add_Click({
     $script:Gui.AppStates = $script:Gui.RemoveStates
@@ -1951,7 +1893,7 @@ $window.Add_Closing({
     }
 })
 
-$script:Gui.ActionButtons = @($window.SelectAllButton,$window.ClearAllButton,$window.InstallEverythingButton,$window.RemoveSelectAllButton,$window.RemoveClearAllButton,$window.RemoveSelectedButton)
+$script:Gui.ActionButtons = @($window.SelectAllButton,$window.ClearAllButton,$window.InstallSelectedButton,$window.RemoveSelectAllButton,$window.RemoveClearAllButton,$window.RemoveSelectedButton)
 Set-GuiButtonsEnabled $true
 Set-GuiLog 'Ready. Select applications and start an operation.'
 
