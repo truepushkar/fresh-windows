@@ -27,7 +27,7 @@ cd fresh-windows\INSTALLATION
 Or, if you just want the raw script with no cloning:
 
 ```powershell
-irm https://raw.githubusercontent.com/truepushkar/fresh-windows/main/INSTALLATION/Setup-Windows.ps1 | iex
+irm https://raw.githubusercontent.com/truepushkar/fresh-windows/main/INSTALLATION/setup.ps1.ps1 | iex
 ```
 
 > **Note:** the script refuses to run unelevated — it needs Administrator rights for machine-wide installs, registry tweaks, and launching WinUtil/MAS without a second UAC prompt.
@@ -138,7 +138,7 @@ Windows / Office activation via an interactive menu:
 fresh-windows/
 ├── INSTALLATION/
 │   ├── Install-WindowsSetup.bat   ← double-click launcher (auto-elevates via UAC)
-│   └── Setup-Windows.ps1          ← the main interactive script
+│   └── setup.ps1.ps1          ← the main interactive script
 ├── WALLPAPER/                     ← a small curated wallpaper collection
 └── README.md
 ```
@@ -151,7 +151,7 @@ fresh-windows/
 
 ## 🔧 Customizing
 
-Want a different app list? Edit the `$Apps` array near the top of `Setup-Windows.ps1`:
+Want a different app list? Edit the `$Apps` array near the top of `setup.ps1.ps1`:
 
 ```powershell
 [PSCustomObject]@{ Number = 21; Name = "OBS Studio"; ID = "OBSProject.OBS"; Source = "winget" }
